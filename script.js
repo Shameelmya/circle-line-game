@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+import { getDatabase, ref, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-// Your Firebase Config
+// Firebase Config (USE YOUR OWN FROM FIREBASE CONSOLE)
 const firebaseConfig = {
   apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
   authDomain: "circle-line-game.firebaseapp.com",
@@ -20,6 +20,7 @@ const db = getDatabase(app);
 const gameId = "default-game";
 let myPlayerNumber = null;
 let currentTurn = 1;
+let inactivityTimer;
 
 // DOM Elements
 const board = document.getElementById("game-board");
@@ -27,6 +28,7 @@ const playerIdDisplay = document.getElementById("player-id");
 const score1Display = document.getElementById("score1");
 const score2Display = document.getElementById("score2");
 const gameStatus = document.getElementById("game-status");
+const resetBtn = document.getElementById("reset-btn");
 
 // Create Game Board
 function createBoard() {
@@ -53,11 +55,16 @@ function createBoard() {
 function handleCircleClick(row, col) {
     if (myPlayerNumber !== currentTurn) return;
     
+    resetInactivityTimer();
+    
     const updates = {};
     updates[`${gameId}/board/${row}/${col}`] = myPlayerNumber;
     updates[`${gameId}/currentTurn`] = myPlayerNumber === 1 ? 2 : 1;
+    updates[`${gameId}/lastActivity`] = Date.now();
     
-    update(ref(db), updates);
+    update(ref(db), updates).catch(error => {
+        console.error("Update failed:", error);
+    });
 }
 
 // Update Game State
@@ -110,11 +117,38 @@ function updateGameState(snapshot) {
             gameStatus.textContent = "Game is full (2 players max)";
         }
     }
+    
+    resetInactivityTimer();
 }
+
+// Reset after inactivity
+function resetInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+        set(ref(db, gameId), null);
+        console.log("Game reset due to inactivity");
+    }, 5 * 60 * 1000); // 5 minutes
+}
+
+// Reset Button
+resetBtn.addEventListener("click", () => {
+    if (confirm("Reset the game for all players?")) {
+        set(ref(db, gameId), null).then(() => {
+            location.reload();
+        });
+    }
+});
 
 // Initialize Game
 createBoard();
-set(ref(db, `${gameId}/currentTurn`), 1);
+set(ref(db, `${gameId}/lastActivity`), Date.now());
 
 // Listen for Changes
 onValue(ref(db, gameId), updateGameState);
+
+// Cleanup on page close
+window.addEventListener("beforeunload", () => {
+    if (myPlayerNumber) {
+        remove(ref(db, `${gameId}/players/${myPlayerNumber}`));
+    }
+});
