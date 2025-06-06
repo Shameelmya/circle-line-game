@@ -1,80 +1,156 @@
-body {
-  font-family: 'Nexa', sans-serif;
+/* ========== BASE RESET & TYPOGRAPHY ========== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  background: #f5f7fa;
-  overflow: hidden;
 }
 
-.container {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px;
-  text-align: center;
+html,
+body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* disable scrolling during play */
+  font-family: "Nexa", "Helvetica Neue", Arial, sans-serif;
+  background-color: #f5f6fa;
+  color: #2c3e50;
 }
 
-.title {
-  font-size: 28px;
-  margin-bottom: 10px;
-  color: #333;
-}
-
-.turn-indicator {
-  font-size: 18px;
-  margin-bottom: 20px;
-  color: #666;
-}
-
-.scoreboard {
+/* ========== HEADER: SCOREBOARD + TURN + RESET BUTTON ========== */
+#header {
   display: flex;
-  justify-content: space-around;
-  margin-bottom: 20px;
-  font-size: 20px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.circle-grid {
-  display: grid;
-  gap: 10px;
-  justify-content: center;
+#scoreboard {
+  display: flex;
+  gap: 2rem;
 }
 
-.circle {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 2px solid #999;
-  background: transparent;
-  cursor: pointer;
-  transition: background 0.2s ease;
+.player-score {
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
-.circle.filled-blue {
-  background-color: #3b82f6;
-  border-color: #3b82f6;
+.player-score .score-value {
+  font-weight: 700;
+  color: #2980b9;
 }
 
-.circle.filled-red {
-  background-color: #ef4444;
-  border-color: #ef4444;
+#turn-indicator {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #27ae60;
 }
 
-.reset-button {
-  margin-top: 20px;
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: #3b82f6;
-  color: white;
+#reset-btn {
+  padding: 0.5rem 1rem;
+  background-color: #e74c3c;
+  color: #fff;
   border: none;
-  border-radius: 6px;
+  border-radius: 0.25rem;
+  font-size: 0.95rem;
   cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
-#lineCanvas {
-  position: fixed;
+#reset-btn:hover {
+  background-color: #c0392b;
+}
+
+/* ========== GAME WRAPPER ========== */
+#game-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: calc(100% - 72px); /* header height ~72px */
+  position: relative;
+}
+
+/* ========== BOARD CONTAINER ========== */
+#game-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 1rem;
+  user-select: none;
+}
+
+/* Each row is a flex container that centers its circles */
+.row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+/* ========== CIRCLE STYLES ========== */
+.circle {
+  width: 32px;
+  height: 32px;
+  border: 2px solid #34495e;
+  border-radius: 50%;
+  background-color: transparent;
+  margin: 0 4px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.circle.filled-1 {
+  background-color: #2980b9; /* Player 1 color */
+  border-color: #2980b9;
+}
+
+.circle.filled-2 {
+  background-color: #e74c3c; /* Player 2 color */
+  border-color: #e74c3c;
+}
+
+/* Disable pointer on filled or when not your turn */
+.circle.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ========== SVG OVERLAY FOR LINES ========== */
+#lines-overlay {
+  position: absolute;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 0;
-  pointer-events: none;
+  z-index: 1;
+  pointer-events: none; /* clicks go through SVG to circles */
+}
+
+/* Each drawn line is a polyline in SVG */
+.polyline-1 {
+  stroke: #2980b9; /* Player 1 line color */
+}
+
+.polyline-2 {
+  stroke: #e74c3c; /* Player 2 line color */
+}
+
+/* ========== MOBILE RESPONSIVENESS ========== */
+@media (max-width: 600px) {
+  .circle {
+    width: 28px;
+    height: 28px;
+    margin: 0 2px;
+  }
+  #reset-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+  }
+  #header {
+    padding: 0.8rem 1rem;
+  }
 }
