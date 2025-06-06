@@ -8,7 +8,7 @@
   />
   <title>Circle Battle (Row Connect)</title>
 
-  <!-- Nexa Font (fallback to sans-serif) -->
+  <!-- Nexa Font (fallback) -->
   <link
     href="https://fonts.googleapis.com/css2?family=Nexa:wght@400;600;700&display=swap"
     rel="stylesheet"
@@ -35,13 +35,13 @@
   <!-- ---------- GAME BOARD CONTAINER ---------- -->
   <main id="game-wrapper">
     <div id="game-container">
-      <!-- Rows of circles will be injected here by JS -->
+      <!-- JS will inject rows of circles here -->
     </div>
-    <!-- SVG overlay for drawing lines & showing eligible lines -->
+    <!-- SVG overlay for drawn lines & eligible dashed lines -->
     <svg id="lines-overlay"></svg>
   </main>
 
-  <!-- Firebase App (v9) -->
+  <!-- Firebase App (v9 Modular) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import {
@@ -52,7 +52,7 @@
       update,
     } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-    // Firebase configuration (replace with yours)
+    // Your own Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
       authDomain: "circle-line-game.firebaseapp.com",
@@ -62,11 +62,11 @@
       appId: "1:73822238753:web:48c52f0ffef482235e0b60"
     };
 
-    // Initialize Firebase
+    // Initialize Firebase & Realtime Database
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Expose to global so script.js can use it
+    // Expose the DB to script.js
     window.__FIREBASE_DB__ = db;
   </script>
 
