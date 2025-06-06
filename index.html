@@ -2,24 +2,76 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Circle Line Game</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+  <title>Circle Battle (Row Connect)</title>
+
+  <!-- Nexa Font (fallback to sans-serif) -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nexa:wght@400;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Main CSS -->
   <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Nexa:wght@400;700&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="container">
-    <h1 class="title">Circle Line Game</h1>
-    <div id="turnIndicator" class="turn-indicator">Loading...</div>
-    <div class="scoreboard">
-      <div id="player1" class="score">🔵 0</div>
-      <div id="player2" class="score">🔴 0</div>
+  <!-- ---------- SCOREBOARD & TURN INDICATOR ---------- -->
+  <header id="header">
+    <div id="scoreboard">
+      <div class="player-score" id="player1-score">
+        Player 1: <span class="score-value">0</span>
+      </div>
+      <div class="player-score" id="player2-score">
+        Player 2: <span class="score-value">0</span>
+      </div>
     </div>
-    <div id="circleGrid" class="circle-grid"></div>
-    <button id="resetGame" class="reset-button">Reset Game</button>
-  </div>
-  <canvas id="lineCanvas"></canvas>
-  <script type="module" src="firebase.js"></script>
+    <div id="turn-indicator">Connecting...</div>
+    <button id="reset-btn">New Game</button>
+  </header>
+
+  <!-- ---------- GAME BOARD CONTAINER ---------- -->
+  <main id="game-wrapper">
+    <div id="game-container">
+      <!-- Rows of circles will be injected here by JS -->
+    </div>
+    <!-- SVG overlay for drawing lines -->
+    <svg id="lines-overlay"></svg>
+  </main>
+
+  <!-- Firebase App (v9) -->
+  <script type="module">
+    // Your Firebase config imported inline so that script.js can use it
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      onValue,
+      set,
+      update,
+    } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+
+    // Firebase configuration (replace with your own)
+    const firebaseConfig = {
+      apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
+      authDomain: "circle-line-game.firebaseapp.com",
+      projectId: "circle-line-game",
+      storageBucket: "circle-line-game.firebasestorage.app",
+      messagingSenderId: "73822238753",
+      appId: "1:73822238753:web:48c52f0ffef482235e0b60"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Expose to global so script.js can import
+    window.__FIREBASE_DB__ = db;
+  </script>
+
+  <!-- Main Game Logic -->
   <script type="module" src="script.js"></script>
 </body>
 </html>
