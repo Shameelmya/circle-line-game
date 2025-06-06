@@ -11,7 +11,7 @@ html,
 body {
   height: 100%;
   width: 100%;
-  overflow: hidden; /* disable scrolling during play */
+  overflow: hidden; /* prevent page from scrolling while drawing */
   font-family: "Nexa", "Helvetica Neue", Arial, sans-serif;
   background-color: #f5f6fa;
   color: #2c3e50;
@@ -68,24 +68,24 @@ body {
 
 /* ========== GAME WRAPPER ========== */
 #game-wrapper {
+  position: relative; /* so the SVG overlay (absolute) matches exactly */
   display: flex;
   justify-content: center;
   align-items: center;
-  height: calc(100% - 72px); /* header height ~72px */
-  position: relative;
+  height: calc(100% - 72px); /* subtract approximate header height */
 }
 
 /* ========== BOARD CONTAINER ========== */
 #game-container {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* margin is inside the wrapper, not affecting overlay */
   margin: 1rem;
   user-select: none;
 }
 
-/* Each row is a flex container that centers its circles */
+/* Each row is centered horizontally */
 .row {
   display: flex;
   justify-content: center;
@@ -106,22 +106,22 @@ body {
 }
 
 .circle.filled-1 {
-  background-color: #2980b9; /* Player 1 color */
+  background-color: #2980b9; /* Player 1 fill */
   border-color: #2980b9;
 }
 
 .circle.filled-2 {
-  background-color: #e74c3c; /* Player 2 color */
+  background-color: #e74c3c; /* Player 2 fill */
   border-color: #e74c3c;
 }
 
-/* Disable pointer on filled or when not your turn */
+/* Disable pointer & fade if not clickable */
 .circle.disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
 
-/* ========== HIGHLIGHT ANIMATION for completed-line circles ========== */
+/* ========== HIGHLIGHT ANIMATION FOR COMPLETED-LINE CIRCLES ========== */
 @keyframes highlightCircle {
   0% {
     box-shadow: 0 0 0px 0px rgba(241, 196, 15, 0.8);
@@ -143,11 +143,13 @@ body {
   position: absolute;
   top: 0;
   left: 0;
+  width: 100%;   /* cover entire #game-wrapper */
+  height: 100%;  /* ditto */
   z-index: 1;
-  pointer-events: none; /* base SVG does not capture clicks */
+  pointer-events: none; /* base SVG does not intercept clicks */
 }
 
-/* Common polyline styling */
+/* Common polyline styling (drawn lines) */
 #lines-overlay polyline {
   fill: none;
   stroke-width: 4;
@@ -155,37 +157,34 @@ body {
   stroke-linejoin: round;
 }
 
-/* Player 1 line color and draw‐animation */
 .polyline-1 {
-  stroke: #2980b9;
+  stroke: #2980b9;       /* Player 1 line color */
   stroke-dasharray: 1000;
   stroke-dashoffset: 1000;
   animation: drawLine 0.6s forwards ease-in-out;
 }
 
-/* Player 2 line color and draw‐animation */
 .polyline-2 {
-  stroke: #e74c3c;
+  stroke: #e74c3c;       /* Player 2 line color */
   stroke-dasharray: 1000;
   stroke-dashoffset: 1000;
   animation: drawLine 0.6s forwards ease-in-out;
 }
 
-/* Animate stroke-dashoffset from full length ⇒ 0 */
 @keyframes drawLine {
   to {
     stroke-dashoffset: 0;
   }
 }
 
-/* ========== ELIGIBLE-LINE (CLICKABLE) STYLING ========== */
+/* ========== ELIGIBLE-LINE (CLICKABLE DASHED) STYLING ========== */
 .eligible-line {
   fill: none;
   stroke: rgba(52, 152, 219, 0.4);
   stroke-dasharray: 4 4;
   stroke-width: 6;
   cursor: pointer;
-  pointer-events: all; /* allow clicks */
+  pointer-events: all; /* allow taps/clicks */
 }
 
 /* ========== MOBILE RESPONSIVENESS ========== */
