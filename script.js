@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
 import { getDatabase, ref, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-// Firebase Configuration (Replace with your config)
+// Firebase Config
 const firebaseConfig = {
     apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
     authDomain: "circle-line-game.firebaseapp.com",
@@ -20,8 +20,7 @@ const db = getDatabase(app);
 const gameId = "default-game";
 let myPlayerNumber = null;
 let currentTurn = 1;
-let inactivityTimer;
-let currentLine = [];
+let selectedCircles = [];
 let completedLines = {};
 
 // DOM Elements
@@ -50,7 +49,16 @@ function createBoard() {
             circle.className = "circle empty";
             circle.dataset.row = row;
             circle.dataset.col = col;
+            
+            // Touch events for mobile
+            circle.addEventListener("touchstart", (e) => {
+                e.preventDefault();
+                handleCircleClick(row, col);
+            });
+            
+            // Mouse events for desktop
             circle.addEventListener("click", () => handleCircleClick(row, col));
+            
             rowDiv.appendChild(circle);
         }
         
@@ -66,7 +74,7 @@ function initCanvas() {
     drawAllLines();
 }
 
-// Draw all lines from Firebase
+// Draw all lines
 function drawAllLines() {
     ctx.clearRect(0, 0, lineCanvas.width, lineCanvas.height);
     
@@ -98,47 +106,43 @@ function drawSingleLine(points, player) {
 function handleCircleClick(row, col) {
     if (myPlayerNumber !== currentTurn) return;
     
-    resetInactivityTimer();
-    
     const circle = document.querySelector(`.circle[data-row="${row}"][data-col="${col}"]`);
-    if (!circle || !circle.classList.contains("empty")) return;
     
-    // Mark circle as filled
-    circle.classList.remove("empty");
-    circle.classList.add(`filled${myPlayerNumber}`);
+    // Only allow connecting filled circles
+    if (!circle || !circle.classList.contains(`filled${myPlayerNumber}`)) return;
     
-    // Calculate circle center position
+    // Get circle center position
     const circleRect = circle.getBoundingClientRect();
     const boardRect = board.getBoundingClientRect();
     
     const point = {
         x: circleRect.left + circleRect.width/2 - boardRect.left,
-        y: circleRect.top + circleRect.height/2 - boardRect.top
+        y: circleRect.top + circleRect.height/2 - boardRect.top,
+        row,
+        col
     };
     
-    currentLine.push(point);
+    // Add to selected circles
+    selectedCircles.push(point);
     
-    // If we have at least 2 points, draw the line
-    if (currentLine.length >= 2) {
-        drawSingleLine(currentLine, myPlayerNumber);
-        
-        // Save line to Firebase when complete
+    // If we have at least 2 selected circles, draw line
+    if (selectedCircles.length >= 2) {
+        const lastTwo = selectedCircles.slice(-2);
         const lineId = Date.now();
+        
+        // Save line to Firebase
         const updates = {};
         updates[`${gameId}/lines/${lineId}`] = {
             player: myPlayerNumber,
-            points: currentLine
+            points: lastTwo
         };
-        updates[`${gameId}/board/${row}/${col}`] = myPlayerNumber;
         updates[`${gameId}/currentTurn`] = myPlayerNumber === 1 ? 2 : 1;
         updates[`${gameId}/lastActivity`] = Date.now();
         
-        update(ref(db), updates).catch(error => {
-            console.error("Update failed:", error);
-        });
-        
-        currentLine = [];
+        update(ref(db), updates).catch(console.error);
     }
+    
+    drawAllLines();
 }
 
 // Calculate Scores
@@ -151,7 +155,7 @@ function calculateScores(lines) {
         const connections = line.points.length - 1;
         
         if (line.player === 1) {
-            score1 += connections * 2; // 2 points per connection
+            score1 += connections * 2;
             connections1 += connections;
         } else {
             score2 += connections * 2;
@@ -188,7 +192,7 @@ function updateGameState(snapshot) {
         turnIndicator.style.backgroundColor = myPlayerNumber === 1 ? "#3498db" : "#e74c3c";
     }
     
-    // Assign player number if not set
+    // Assign player number
     if (!myPlayerNumber) {
         const players = data.players || {};
         myPlayerNumber = Object.keys(players).length < 2 ? Object.keys(players).length + 1 : null;
@@ -201,17 +205,6 @@ function updateGameState(snapshot) {
             gameStatus.textContent = "Game is full (2 players max)";
         }
     }
-    
-    resetInactivityTimer();
-}
-
-// Reset after inactivity
-function resetInactivityTimer() {
-    clearTimeout(inactivityTimer);
-    inactivityTimer = setTimeout(() => {
-        set(ref(db, gameId), null);
-        console.log("Game reset due to inactivity");
-    }, 5 * 60 * 1000); // 5 minutes
 }
 
 // Reset Button
@@ -229,7 +222,7 @@ initCanvas();
 window.addEventListener("resize", initCanvas);
 
 // Set initial game state
-set(ref(db, `${gameId}/lastActivity`), Date.now());
+set(ref(db, `${gameId}/currentTurn`), 1);
 
 // Listen for game changes
 onValue(ref(db, gameId), updateGameState);
