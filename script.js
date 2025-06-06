@@ -1,6 +1,8 @@
 /**
  * Main game logic for Circle Battle (Row Connect).
  * Uses Firebase Realtime Database to sync two-player state.
+ * Updated: Only rows + two diagonal types allowed.  Smooth draw-animations.
+ * Highlights completed-line circles with brief yellow glow.
  */
 
 import {
@@ -19,7 +21,7 @@ const db = window.__FIREBASE_DB__; // from index.html
 
 const ROW_COUNT = 10;
 
-// Generate a 2D structure: row 1 has 10 cells (1..10), row 2 has 9 cells (1..9), … row 10 has 1 cell
+// Build board structure: row 1 has 10 columns (1..10), row 2 has 9 (1..9), … row 10 has 1 (col 1).
 let boardStructure = [];
 for (let r = 1; r <= ROW_COUNT; r++) {
   boardStructure.push({
@@ -28,7 +30,9 @@ for (let r = 1; r <= ROW_COUNT; r++) {
   });
 }
 
-// Compute all line definitions (rows, columns, diagonals "\" and "/").
+// Compute allowed line definitions (only rows + diagonals that start on the top row).
+// That gives exactly 10 rows + 10 "\" diagonals + 10 "/" diagonals = 30 total.
+
 let ALL_LINES = {}; // { lineId: { cells: [ {r,c}, ... ] } }
 
 // 1) Rows
@@ -39,20 +43,7 @@ for (let r = 1; r <= ROW_COUNT; r++) {
   ALL_LINES[`row-${r}`] = { cells: rowCells };
 }
 
-// 2) Columns (ranging c=1..10). A column c includes (r,c) where c ≤ (11−r).
-for (let c = 1; c <= ROW_COUNT; c++) {
-  let colCells = [];
-  for (let r = 1; r <= ROW_COUNT; r++) {
-    if (c <= ROW_COUNT + 1 - r) {
-      colCells.push({ r, c });
-    }
-  }
-  if (colCells.length > 1) {
-    ALL_LINES[`col-${c}`] = { cells: colCells };
-  }
-}
-
-// 3) Diagonals "\" (slope down-right): start at each (1,c) for c=1..10, and (r,1) for r=2..10
+// 2) "\" diagonals (↘) starting on the top row only
 function collectDiagBackslash(startR, startC) {
   let cells = [];
   let r = startR,
@@ -64,18 +55,14 @@ function collectDiagBackslash(startR, startC) {
   }
   return cells;
 }
-const diagBs = {};
 for (let c = 1; c <= ROW_COUNT; c++) {
-  let cells = collectDiagBackslash(1, c);
-  if (cells.length > 1) diagBs[`diag_b\\-top-${c}`] = { cells };
+  const cells = collectDiagBackslash(1, c);
+  if (cells.length > 1) {
+    ALL_LINES[`diag_bslash-${c}`] = { cells };
+  }
 }
-for (let r = 2; r <= ROW_COUNT; r++) {
-  let cells = collectDiagBackslash(r, 1);
-  if (cells.length > 1) diagBs[`diag_b\\-left-${r}`] = { cells };
-}
-Object.assign(ALL_LINES, diagBs);
 
-// 4) Diagonals "/" (slope down-left): start at (1,c) for c=1..10, and (r, 11−r) for r=2..10
+// 3) "/" diagonals (↙) starting on the top row only
 function collectDiagSlash(startR, startC) {
   let cells = [];
   let r = startR,
@@ -91,60 +78,51 @@ function collectDiagSlash(startR, startC) {
   }
   return cells;
 }
-const diagFs = {};
 for (let c = 1; c <= ROW_COUNT; c++) {
-  let cells = collectDiagSlash(1, c);
-  if (cells.length > 1) diagFs[`diag_f\\-top-${c}`] = { cells };
+  const cells = collectDiagSlash(1, c);
+  if (cells.length > 1) {
+    ALL_LINES[`diag_fslash-${c}`] = { cells };
+  }
 }
-for (let r = 2; r <= ROW_COUNT; r++) {
-  let startC = ROW_COUNT + 1 - r; // rightmost column on row r
-  let cells = collectDiagSlash(r, startC);
-  if (cells.length > 1) diagFs[`diag_f\\-right-${r}`] = { cells };
-}
-Object.assign(ALL_LINES, diagFs);
+
+// Build a quick map: lineId → [ "r_c", ... ] for lookups.
+const LINE_TO_KEYS = {};
+Object.entries(ALL_LINES).forEach(([lineId, info]) => {
+  LINE_TO_KEYS[lineId] = info.cells.map((pt) => `${pt.r}_${pt.c}`);
+});
 
 // ————————————————————————————————————————————————————————————
-// 2. HELPERS: ID STRINGS, PIXEL COORDS, ETC.
+// 2. HELPERS: CELL KEYS, POSITIONS, ETC.
 // ————————————————————————————————————————————————————————————
 
 /**
- * Convert (r,c) → a string key "r_c"
+ * Return the string key "r_c" for a given (r,c).
  */
 function cellKey(r, c) {
   return `${r}_${c}`;
 }
 
 /**
- * Build a mapping of lineId → [ "r_c", ... ] for easier lookups.
- */
-const LINE_TO_KEYS = {};
-Object.entries(ALL_LINES).forEach(([lineId, info]) => {
-  LINE_TO_KEYS[lineId] = info.cells.map((pt) => cellKey(pt.r, pt.c));
-});
-
-/**
- * Given a lineId and the DOM circles, return an array of center positions for drawing.
+ * Given a lineId, return an array of center { x, y } (relative to #game-wrapper)
+ * to use for drawing an SVG polyline.
  */
 function getLineCenterPoints(lineId) {
-  const keys = LINE_TO_KEYS[lineId];
-  const points = keys.map((k) => {
-    const el = document.querySelector(`.circle[data-key="${k}"]`);
-    const rect = el.getBoundingClientRect();
-    const parentRect = el.parentNode.parentNode.getBoundingClientRect();
-    // center of that circle, relative to #game-wrapper
+  const wrapperRect = document
+    .getElementById("game-wrapper")
+    .getBoundingClientRect();
+
+  return LINE_TO_KEYS[lineId].map((k) => {
+    const [rStr, cStr] = k.split("_");
+    const r = Number(rStr),
+      c = Number(cStr);
+    const circleEl = document.querySelector(`.circle[data-key="${k}"]`);
+    const circleRect = circleEl.getBoundingClientRect();
+    // center relative to wrapper:
     return {
-      x: rect.left + rect.width / 2 - parentRect.left,
-      y: rect.top + rect.height / 2 - parentRect.top,
+      x: circleRect.left + circleRect.width / 2 - wrapperRect.left,
+      y: circleRect.top + circleRect.height / 2 - wrapperRect.top,
     };
   });
-  return points;
-}
-
-/**
- * Given array of points, build an SVG polyline string.
- */
-function buildPolylineSVG(points) {
-  return points.map((pt) => `${pt.x},${pt.y}`).join(" ");
 }
 
 // ————————————————————————————————————————————————————————————
@@ -152,8 +130,8 @@ function buildPolylineSVG(points) {
 // ————————————————————————————————————————————————————————————
 
 /**
- * Determine a “gameId” node in Realtime DB. 
- * If URL has ?gameId=xxx, use that. Otherwise default to "defaultGame".
+ * Determine a “gameId” node in Realtime DB. If URL has ?gameId=xxx, use that.
+ * Otherwise default to "defaultGame".
  */
 function getGameId() {
   const params = new URLSearchParams(window.location.search);
@@ -179,7 +157,7 @@ function buildInitialState() {
   return {
     cells,
     turn: 1,
-    scores: { 1: 0, 2: 0 },
+    scores: { "1": 0, "2": 0 },
     lines: {}, // lineId → playerNumber
   };
 }
@@ -206,12 +184,11 @@ const resetBtn = document.getElementById("reset-btn");
 let localPlayer = null; // 1 or 2
 
 /**
- * Prompt user to choose Player 1 or Player 2.
- * We store this in-session, not persisted.
+ * Prompt user to choose Player 1 or Player 2 (stored in-session).
  */
 function promptForPlayer() {
   let choice = null;
-  while (![ "1", "2" ].includes(choice)) {
+  while (!["1", "2"].includes(choice)) {
     choice = prompt("Choose your player: 1 or 2").trim();
   }
   localPlayer = Number(choice);
@@ -308,27 +285,56 @@ function updateBoardUI(state) {
     svgOverlay.removeChild(svgOverlay.firstChild);
   }
   Object.entries(lines || {}).forEach(([lineId, playerNum]) => {
-    drawLineInSVG(lineId, playerNum);
+    drawLineInSVG(lineId, playerNum, /*animate=*/ false);
   });
 }
 
 /**
  * Draw a single line in the SVG overlay.
+ * If animate=true, add an animation that draws stroke over time.
  */
-function drawLineInSVG(lineId, playerNum) {
+function drawLineInSVG(lineId, playerNum, animate = true) {
   const points = getLineCenterPoints(lineId);
   if (!points || points.length < 2) return;
+
   const poly = document.createElementNS(
     "http://www.w3.org/2000/svg",
     "polyline"
   );
-  poly.setAttribute("points", buildPolylineSVG(points));
-  poly.setAttribute("fill", "none");
-  poly.setAttribute("stroke-width", "4");
+  poly.setAttribute("points", points.map((p) => `${p.x},${p.y}`).join(" "));
   poly.setAttribute("class", `polyline-${playerNum}`);
-  poly.setAttribute("stroke-linecap", "round");
-  poly.setAttribute("stroke-linejoin", "round");
-  svgOverlay.appendChild(poly);
+
+  if (animate) {
+    // After appending, measure length and trigger CSS draw animation
+    svgOverlay.appendChild(poly);
+    const totalLen = poly.getTotalLength();
+    poly.style.strokeDasharray = totalLen;
+    poly.style.strokeDashoffset = totalLen;
+    // Force a reflow so that the transition/animation kicks in
+    // (we rely on CSS @keyframes drawLine to animate dashoffset → 0)
+    poly.getBoundingClientRect();
+    poly.style.animation = `drawLine 0.6s forwards ease-in-out`;
+  } else {
+    // If not animating (re-rendering existing lines), skip dash animations
+    poly.style.strokeDasharray = "";
+    poly.style.strokeDashoffset = "";
+    svgOverlay.appendChild(poly);
+  }
+}
+
+/**
+ * Highlight each circle in the completed-line segment.
+ * Add .highlight class briefly, then remove after animation ends (~400ms).
+ */
+function highlightCircles(lineId) {
+  LINE_TO_KEYS[lineId].forEach((k) => {
+    const circleEl = document.querySelector(`.circle[data-key="${k}"]`);
+    if (!circleEl) return;
+    circleEl.classList.add("highlight");
+    setTimeout(() => {
+      circleEl.classList.remove("highlight");
+    }, 400);
+  });
 }
 
 // ————————————————————————————————————————————————————————————
@@ -338,7 +344,7 @@ function drawLineInSVG(lineId, playerNum) {
 /**
  * When a user clicks a circle (only if it’s their turn and cell is empty):
  *  1) Fill the cell locally in DB
- *  2) Check lines completed, draw them, update score, handle turn retention or switch
+ *  2) Check lines completed, draw them with animation, update score, handle turn retention or switch
  */
 gameContainer.addEventListener("click", (e) => {
   if (!e.target.classList.contains("circle")) return;
@@ -348,7 +354,7 @@ gameContainer.addEventListener("click", (e) => {
   // First, fetch latest state once to ensure we have current turn + cell value
   const stateSnapshot = snapshotValue(GAME_REF);
   const state = stateSnapshot || buildInitialState();
-  const { cells, turn, lines, scores } = state;
+  const { cells, turn } = state;
 
   // If it’s not our turn, do nothing
   if (turn !== localPlayer) return;
@@ -367,7 +373,6 @@ gameContainer.addEventListener("click", (e) => {
 
 /**
  * Utility to get a *synchronous* copy of the latest DB snapshot.
- * (Because onValue is async, this uses a Promise + .then shortcut.)
  */
 function snapshotValue(dbRef) {
   let val = null;
@@ -383,9 +388,9 @@ function snapshotValue(dbRef) {
 
 /**
  * Called after we successfully set cells[key] = localPlayer.
- * We now check all lines that pass through that cell for completion.
- * If any new line(s) are completed, add them to DB, update that player’s score,
- * and keep the turn on the same player. Otherwise, switch turn.
+ * We now check all allowed lines that pass through that cell for completion.
+ * If any new line(s) are completed, highlight circles, draw them with animation,
+ * update that player’s score, and keep the turn. Otherwise, switch turn.
  */
 function processAfterFill(filledKey) {
   // 1) Read latest state again
@@ -394,14 +399,14 @@ function processAfterFill(filledKey) {
     (snap) => {
       const state = snap.val();
       if (!state) return;
-      const { cells, lines, scores } = state;
+      const { cells, lines, scores, turn } = state;
 
-      // 2) Determine (r,c) from filledKey
+      // 2) Identify (r,c) from filledKey
       const [rStr, cStr] = filledKey.split("_");
-      const r = Number(rStr);
-      const c = Number(cStr);
+      const r = Number(rStr),
+        c = Number(cStr);
 
-      // 3) Identify all lineIds that include (r,c)
+      // 3) Identify all allowed lineIds that include (r,c)
       const completedThisMove = [];
       Object.entries(LINE_TO_KEYS).forEach(([lineId, keyArr]) => {
         if (!keyArr.includes(filledKey)) return;
@@ -414,19 +419,36 @@ function processAfterFill(filledKey) {
         }
       });
 
-      // 4) If any lines completed, update DB lines & score, keep turn
+      // 4) If any lines completed, highlight, draw with animation, update DB lines & score
       if (completedThisMove.length > 0) {
         const multiUpdates = {};
         let pointsGained = 0;
+
         completedThisMove.forEach((lineId) => {
+          // Mark line in DB
           multiUpdates[`lines/${lineId}`] = localPlayer;
-          // score += length of line
+          // Score = length of that line
           pointsGained += LINE_TO_KEYS[lineId].length;
         });
+
+        // Update that player’s score
         multiUpdates[`scores/${localPlayer}`] =
           (scores[localPlayer] || 0) + pointsGained;
-        // We do NOT change turn (retain same player)
-        update(GAME_REF, multiUpdates);
+
+        // 4a) First, highlight circles in all newly completed lines
+        completedThisMove.forEach((lineId) => highlightCircles(lineId));
+
+        // 4b) Then, apply DB updates (lines + score).  After DB update, the onValue listener
+        //     will call updateBoardUI, but we also need to draw them with animation immediately.
+        update(GAME_REF, multiUpdates).then(() => {
+          // Draw all newly completed lines with animation
+          completedThisMove.forEach((lineId) =>
+            drawLineInSVG(lineId, localPlayer, /*animate=*/ true)
+          );
+        });
+
+        // 4c) Keep the turn the same (no turn switch).
+        //      We do NOT set turn in DB, so it stays localPlayer.
       } else {
         // 5) No lines completed → switch turn
         const nextTurn = localPlayer === 1 ? 2 : 1;
@@ -458,7 +480,7 @@ function init() {
   promptForPlayer();
   renderBoard();
 
-  // After rendering, if DB is empty, initialize
+  // After rendering, if DB is empty, initialize it
   onValue(
     GAME_REF,
     (snap) => {
