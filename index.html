@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- ---------- SCOREBOARD & TURN INDICATOR ---------- -->
+  <!-- ---------- HEADER: SCOREBOARD + TURN + RESET BUTTON ---------- -->
   <header id="header">
     <div id="scoreboard">
       <div class="player-score" id="player1-score">
@@ -43,7 +43,6 @@
 
   <!-- Firebase App (v9) -->
   <script type="module">
-    // Your Firebase config imported inline so that script.js can use it
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import {
       getDatabase,
@@ -53,7 +52,7 @@
       update,
     } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-    // Firebase configuration (replace with your own)
+    // Firebase configuration (your own)
     const firebaseConfig = {
       apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
       authDomain: "circle-line-game.firebaseapp.com",
@@ -67,7 +66,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Expose to global so script.js can import
+    // Expose to global so script.js can use it
     window.__FIREBASE_DB__ = db;
   </script>
 
