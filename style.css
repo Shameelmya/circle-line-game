@@ -144,7 +144,7 @@ body {
   top: 0;
   left: 0;
   z-index: 1;
-  pointer-events: none; /* clicks go through SVG to circles */
+  pointer-events: none; /* base SVG does not capture clicks */
 }
 
 /* Common polyline styling */
@@ -176,6 +176,16 @@ body {
   to {
     stroke-dashoffset: 0;
   }
+}
+
+/* ========== ELIGIBLE-LINE (CLICKABLE) STYLING ========== */
+.eligible-line {
+  fill: none;
+  stroke: rgba(52, 152, 219, 0.4);
+  stroke-dasharray: 4 4;
+  stroke-width: 6;
+  cursor: pointer;
+  pointer-events: all; /* allow clicks */
 }
 
 /* ========== MOBILE RESPONSIVENESS ========== */
