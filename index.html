@@ -37,7 +37,7 @@
     <div id="game-container">
       <!-- Rows of circles will be injected here by JS -->
     </div>
-    <!-- SVG overlay for drawing lines -->
+    <!-- SVG overlay for drawing lines & showing eligible lines -->
     <svg id="lines-overlay"></svg>
   </main>
 
@@ -52,7 +52,7 @@
       update,
     } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-    // Firebase configuration (your own)
+    // Firebase configuration (replace with yours)
     const firebaseConfig = {
       apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
       authDomain: "circle-line-game.firebaseapp.com",
