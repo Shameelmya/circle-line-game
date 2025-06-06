@@ -1,8 +1,8 @@
 /**
  * Main game logic for Circle Battle (Row Connect).
  * Uses Firebase Realtime Database to sync two-player state.
- * Updated: Only rows + two diagonal types allowed.  Smooth draw-animations.
- * Highlights completed-line circles with brief yellow glow.
+ * Now: Lines become “eligible” but only appear after the player clicks them.
+ * Eligible lines show as dashed overlays; clicking draws them with animation.
  */
 
 import {
@@ -30,8 +30,8 @@ for (let r = 1; r <= ROW_COUNT; r++) {
   });
 }
 
-// Compute allowed line definitions (only rows + diagonals that start on the top row).
-// That gives exactly 10 rows + 10 "\" diagonals + 10 "/" diagonals = 30 total.
+// Compute allowed line definitions (only rows + two diagonal types starting on top row).
+// That yields exactly 10 rows + 10 ↘ diagonals + 10 ↙ diagonals = 30 total.
 
 let ALL_LINES = {}; // { lineId: { cells: [ {r,c}, ... ] } }
 
@@ -43,7 +43,7 @@ for (let r = 1; r <= ROW_COUNT; r++) {
   ALL_LINES[`row-${r}`] = { cells: rowCells };
 }
 
-// 2) "\" diagonals (↘) starting on the top row only
+// 2) "\" diagonals (↘) starting on top row
 function collectDiagBackslash(startR, startC) {
   let cells = [];
   let r = startR,
@@ -62,7 +62,7 @@ for (let c = 1; c <= ROW_COUNT; c++) {
   }
 }
 
-// 3) "/" diagonals (↙) starting on the top row only
+// 3) "/" diagonals (↙) starting on top row
 function collectDiagSlash(startR, startC) {
   let cells = [];
   let r = startR,
@@ -85,7 +85,7 @@ for (let c = 1; c <= ROW_COUNT; c++) {
   }
 }
 
-// Build a quick map: lineId → [ "r_c", ... ] for lookups.
+// Build a quick lookup: lineId → [ "r_c", ... ]
 const LINE_TO_KEYS = {};
 Object.entries(ALL_LINES).forEach(([lineId, info]) => {
   LINE_TO_KEYS[lineId] = info.cells.map((pt) => `${pt.r}_${pt.c}`);
@@ -117,7 +117,6 @@ function getLineCenterPoints(lineId) {
       c = Number(cStr);
     const circleEl = document.querySelector(`.circle[data-key="${k}"]`);
     const circleRect = circleEl.getBoundingClientRect();
-    // center relative to wrapper:
     return {
       x: circleRect.left + circleRect.width / 2 - wrapperRect.left,
       y: circleRect.top + circleRect.height / 2 - wrapperRect.top,
@@ -145,7 +144,7 @@ const GAME_REF = ref(db, `games/${GAME_ID}`);
  * - cells: { "r_c": 0 }
  * - turn: 1
  * - scores: {1:0, 2:0}
- * - lines: {}
+ * - lines: {}            // lines actually drawn
  */
 function buildInitialState() {
   const cells = {};
@@ -158,7 +157,7 @@ function buildInitialState() {
     cells,
     turn: 1,
     scores: { "1": 0, "2": 0 },
-    lines: {}, // lineId → playerNumber
+    lines: {}, // drawn lines only
   };
 }
 
@@ -182,6 +181,9 @@ const player2ScoreEl = document.querySelector("#player2-score .score-value");
 const resetBtn = document.getElementById("reset-btn");
 
 let localPlayer = null; // 1 or 2
+
+// When lines become “eligible” for the local player, store them here
+let pendingLines = [];
 
 /**
  * Prompt user to choose Player 1 or Player 2 (stored in-session).
@@ -232,7 +234,8 @@ function resizeSVGOverlay() {
 
 /**
  * Called whenever the game state node changes.
- * Update UI: cells, scores, lines, turn indicator.
+ * Update UI: cells, scores, drawn lines, turn indicator.
+ * (Eligible lines are client‐local and not stored in DB.)
  */
 onValue(GAME_REF, (snapshot) => {
   const state = snapshot.val();
@@ -246,6 +249,7 @@ onValue(GAME_REF, (snapshot) => {
 
 /**
  * Apply full state to the board UI.
+ * Note: Only “drawn” lines appear as solid polylines.
  */
 function updateBoardUI(state) {
   const { cells, scores, turn, lines } = state;
@@ -254,14 +258,15 @@ function updateBoardUI(state) {
   Object.entries(cells).forEach(([key, val]) => {
     const cellEl = document.querySelector(`.circle[data-key="${key}"]`);
     if (!cellEl) return;
-    cellEl.classList.remove("filled-1", "filled-2", "disabled");
+    cellEl.classList.remove("filled-1", "filled-2", "disabled", "highlight");
     if (val === 1) {
       cellEl.classList.add("filled-1");
     } else if (val === 2) {
       cellEl.classList.add("filled-2");
     } else {
       // empty
-      if (turn !== localPlayer) {
+      if (turn !== localPlayer || pendingLines.length > 0) {
+        // Disable if it's not our turn or if we have pending lines to draw
         cellEl.classList.add("disabled");
       }
     }
@@ -273,25 +278,39 @@ function updateBoardUI(state) {
 
   // 3) Update turn indicator
   if (turn === localPlayer) {
-    turnIndicator.textContent = "Your turn";
-    turnIndicator.style.color = "#27ae60";
+    if (pendingLines.length > 0) {
+      turnIndicator.textContent = `Draw your ${pendingLines.length} line${pendingLines.length > 1 ? "s" : ""}`;
+      turnIndicator.style.color = "#d35400";
+    } else {
+      turnIndicator.textContent = "Your turn";
+      turnIndicator.style.color = "#27ae60";
+    }
   } else {
     turnIndicator.textContent = "Opponent’s turn";
     turnIndicator.style.color = "#c0392b";
   }
 
-  // 4) Update drawn lines (clear & redraw)
+  // 4) Clear existing SVG elements
   while (svgOverlay.firstChild) {
     svgOverlay.removeChild(svgOverlay.firstChild);
   }
+
+  // 5) Draw all “already drawn” lines from state.lines
   Object.entries(lines || {}).forEach(([lineId, playerNum]) => {
-    drawLineInSVG(lineId, playerNum, /*animate=*/ false);
+    drawLineInSVG(lineId, playerNum, /* animate= */ false);
   });
+
+  // 6) If local player has pendingLines, show them as dashed clickable overlays
+  if (turn === localPlayer && pendingLines.length > 0) {
+    pendingLines.forEach((lineId) => {
+      drawEligibleOverlay(lineId);
+    });
+  }
 }
 
 /**
- * Draw a single line in the SVG overlay.
- * If animate=true, add an animation that draws stroke over time.
+ * Draw a single drawn line in the SVG overlay.
+ * If animate=true, uses stroke‐dash animation.
  */
 function drawLineInSVG(lineId, playerNum, animate = true) {
   const points = getLineCenterPoints(lineId);
@@ -305,17 +324,15 @@ function drawLineInSVG(lineId, playerNum, animate = true) {
   poly.setAttribute("class", `polyline-${playerNum}`);
 
   if (animate) {
-    // After appending, measure length and trigger CSS draw animation
     svgOverlay.appendChild(poly);
     const totalLen = poly.getTotalLength();
     poly.style.strokeDasharray = totalLen;
     poly.style.strokeDashoffset = totalLen;
-    // Force a reflow so that the transition/animation kicks in
-    // (we rely on CSS @keyframes drawLine to animate dashoffset → 0)
+    // Force reflow for the animation to kick in
     poly.getBoundingClientRect();
     poly.style.animation = `drawLine 0.6s forwards ease-in-out`;
   } else {
-    // If not animating (re-rendering existing lines), skip dash animations
+    // Already drawn—just append without animation
     poly.style.strokeDasharray = "";
     poly.style.strokeDashoffset = "";
     svgOverlay.appendChild(poly);
@@ -323,18 +340,92 @@ function drawLineInSVG(lineId, playerNum, animate = true) {
 }
 
 /**
- * Highlight each circle in the completed-line segment.
- * Add .highlight class briefly, then remove after animation ends (~400ms).
+ * Draw a dashed, clickable overlay for a line that’s “eligible” but not yet drawn.
  */
-function highlightCircles(lineId) {
-  LINE_TO_KEYS[lineId].forEach((k) => {
-    const circleEl = document.querySelector(`.circle[data-key="${k}"]`);
-    if (!circleEl) return;
-    circleEl.classList.add("highlight");
-    setTimeout(() => {
-      circleEl.classList.remove("highlight");
-    }, 400);
-  });
+function drawEligibleOverlay(lineId) {
+  const points = getLineCenterPoints(lineId);
+  if (!points || points.length < 2) return;
+
+  const poly = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "polyline"
+  );
+  poly.setAttribute("points", points.map((p) => `${p.x},${p.y}`).join(" "));
+  poly.setAttribute("class", "eligible-line");
+  poly.dataset.lineId = lineId; // store for click handler
+
+  // Ensure pointer-events are enabled so it can be clicked
+  poly.style.pointerEvents = "all";
+  poly.style.cursor = "pointer";
+
+  svgOverlay.appendChild(poly);
+}
+
+// Handle clicks on eligible‐line overlays
+svgOverlay.addEventListener("click", (e) => {
+  if (
+    e.target.nodeName === "polyline" &&
+    e.target.classList.contains("eligible-line")
+  ) {
+    const lineId = e.target.dataset.lineId;
+    if (!pendingLines.includes(lineId)) return;
+    // Draw this line (animate), award points, then remove from pending
+    drawOneEligibleLine(lineId);
+  }
+});
+
+/**
+ * When player clicks one eligible line:
+ * 1) highlight circles
+ * 2) draw solid animated line
+ * 3) update DB: set lines/<lineId> = localPlayer, add points
+ * 4) remove from pendingLines; if none remain, end drawing-phase and switch or continue turn as needed
+ */
+function drawOneEligibleLine(lineId) {
+  // 1) Highlight circles in that segment
+  highlightCircles(lineId);
+
+  // 2) Draw solid animated line
+  drawLineInSVG(lineId, localPlayer, /* animate= */ true);
+
+  // 3) Update DB: lines & score
+  const stateSnapshot = snapshotValue(GAME_REF);
+  const state = stateSnapshot || buildInitialState();
+  const { scores, lines } = state;
+
+  // Score gained = length of that line
+  const gained = LINE_TO_KEYS[lineId].length;
+  const newScore = (scores[localPlayer] || 0) + gained;
+
+  const updates = {};
+  updates[`lines/${lineId}`] = localPlayer;
+  updates[`scores/${localPlayer}`] = newScore;
+
+  update(GAME_REF, updates);
+
+  // 4) Remove this line from pendingLines, then re-render UI
+  pendingLines = pendingLines.filter((lid) => lid !== lineId);
+  // A short delay so the UI can reflect removal of that dashed overlay:
+  setTimeout(() => {
+    const currentState = snapshotValue(GAME_REF);
+    updateBoardUI(currentState);
+    // If no more pending lines, end drawing-phase:
+    if (pendingLines.length === 0) {
+      finalizeAfterAllLines();
+    }
+  }, 100); // 100ms delay
+}
+
+/**
+ * After all pending lines are drawn, we check whether the player gets another fill turn or we switch turn.
+ * - If the last fill (that caused pendingLines) also completed no further lines, we switch turn.
+ * - But since pendingLines are the only lines completed by that last fill, after drawing them we now switch turn.
+ * (In other words, after drawing all eligible lines, it’s the other player's turn.)
+ */
+function finalizeAfterAllLines() {
+  // Switch turn to other player
+  const nextTurn = localPlayer === 1 ? 2 : 1;
+  update(GAME_REF, { turn: nextTurn });
 }
 
 // ————————————————————————————————————————————————————————————
@@ -342,22 +433,25 @@ function highlightCircles(lineId) {
 // ————————————————————————————————————————————————————————————
 
 /**
- * When a user clicks a circle (only if it’s their turn and cell is empty):
- *  1) Fill the cell locally in DB
- *  2) Check lines completed, draw them with animation, update score, handle turn retention or switch
+ * When a user clicks a circle (only if it’s their turn, no pending lines, and cell is empty):
+ * 1) Fill the cell locally in DB
+ * 2) Check which lines are now eligible (from the 30 allowed)
+ * 3) If ≥1 eligible: store them in pendingLines (client‐local), highlight circles & show dashed overlays
+ *    and allow player to click/draw them. Do NOT update DB lines or scores yet.
+ * 4) If none eligible: immediately switch turn.
  */
 gameContainer.addEventListener("click", (e) => {
   if (!e.target.classList.contains("circle")) return;
   const circle = e.target;
   const key = circle.dataset.key;
 
-  // First, fetch latest state once to ensure we have current turn + cell value
+  // Fetch latest state
   const stateSnapshot = snapshotValue(GAME_REF);
   const state = stateSnapshot || buildInitialState();
   const { cells, turn } = state;
 
-  // If it’s not our turn, do nothing
-  if (turn !== localPlayer) return;
+  // If it’s not our turn or player has pendingLines, do nothing
+  if (turn !== localPlayer || pendingLines.length > 0) return;
 
   // If cell already filled, do nothing
   if (cells[key] !== 0) return;
@@ -366,8 +460,8 @@ gameContainer.addEventListener("click", (e) => {
   const updates = {};
   updates[`cells/${key}`] = localPlayer;
   update(GAME_REF, updates).then(() => {
-    // After updating DB with filled cell, re-fetch state and process line checks
-    processAfterFill(key);
+    // After updating DB with the filled cell, determine eligible lines
+    checkEligibleAfterFill(key);
   });
 });
 
@@ -387,70 +481,40 @@ function snapshotValue(dbRef) {
 }
 
 /**
- * Called after we successfully set cells[key] = localPlayer.
- * We now check all allowed lines that pass through that cell for completion.
- * If any new line(s) are completed, highlight circles, draw them with animation,
- * update that player’s score, and keep the turn. Otherwise, switch turn.
+ * After filling a circle, check all allowed lines that pass through that cell for eligibility.
+ * If any new lines are fully filled, store them in pendingLines, highlight & show dashed overlays.
+ * If no lines eligible, switch turn immediately.
  */
-function processAfterFill(filledKey) {
-  // 1) Read latest state again
+function checkEligibleAfterFill(filledKey) {
   onValue(
     GAME_REF,
     (snap) => {
       const state = snap.val();
       if (!state) return;
-      const { cells, lines, scores, turn } = state;
+      const { cells, lines } = state;
 
-      // 2) Identify (r,c) from filledKey
-      const [rStr, cStr] = filledKey.split("_");
-      const r = Number(rStr),
-        c = Number(cStr);
-
-      // 3) Identify all allowed lineIds that include (r,c)
-      const completedThisMove = [];
+      // 1) Identify (r,c) from filledKey (though filledKey is enough to check LINE_TO_KEYS)
+      // 2) Find all lineIds that include filledKey, are not already drawn, and now all their cells are filled
+      const newlyEligible = [];
       Object.entries(LINE_TO_KEYS).forEach(([lineId, keyArr]) => {
         if (!keyArr.includes(filledKey)) return;
-        // If line already drawn, skip
-        if (lines && lines[lineId]) return;
-        // Check if all cells in that line are now nonzero
+        if (lines && lines[lineId]) return; // already drawn
+        // Check if all cells in that line are filled (cells[k] != 0)
         const allFilled = keyArr.every((k) => cells[k] !== 0);
         if (allFilled) {
-          completedThisMove.push(lineId);
+          newlyEligible.push(lineId);
         }
       });
 
-      // 4) If any lines completed, highlight, draw with animation, update DB lines & score
-      if (completedThisMove.length > 0) {
-        const multiUpdates = {};
-        let pointsGained = 0;
-
-        completedThisMove.forEach((lineId) => {
-          // Mark line in DB
-          multiUpdates[`lines/${lineId}`] = localPlayer;
-          // Score = length of that line
-          pointsGained += LINE_TO_KEYS[lineId].length;
-        });
-
-        // Update that player’s score
-        multiUpdates[`scores/${localPlayer}`] =
-          (scores[localPlayer] || 0) + pointsGained;
-
-        // 4a) First, highlight circles in all newly completed lines
-        completedThisMove.forEach((lineId) => highlightCircles(lineId));
-
-        // 4b) Then, apply DB updates (lines + score).  After DB update, the onValue listener
-        //     will call updateBoardUI, but we also need to draw them with animation immediately.
-        update(GAME_REF, multiUpdates).then(() => {
-          // Draw all newly completed lines with animation
-          completedThisMove.forEach((lineId) =>
-            drawLineInSVG(lineId, localPlayer, /*animate=*/ true)
-          );
-        });
-
-        // 4c) Keep the turn the same (no turn switch).
-        //      We do NOT set turn in DB, so it stays localPlayer.
+      if (newlyEligible.length > 0) {
+        // 3) If at least one eligible line, store them client‐side
+        pendingLines = newlyEligible.slice();
+        // 4) Highlight their circles and show dashed overlays
+        newlyEligible.forEach((lid) => highlightCircles(lid));
+        const currentState = snapshotValue(GAME_REF);
+        updateBoardUI(currentState);
       } else {
-        // 5) No lines completed → switch turn
+        // 5) If no eligible lines, switch turn immediately
         const nextTurn = localPlayer === 1 ? 2 : 1;
         update(GAME_REF, { turn: nextTurn });
       }
@@ -468,6 +532,7 @@ resetBtn.addEventListener("click", () => {
     "Are you sure you want to restart the game? All progress will be lost."
   );
   if (confirmReset) {
+    pendingLines = [];
     resetGameInDatabase();
   }
 });
