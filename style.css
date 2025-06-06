@@ -121,6 +121,23 @@ body {
   opacity: 0.6;
 }
 
+/* ========== HIGHLIGHT ANIMATION for completed-line circles ========== */
+@keyframes highlightCircle {
+  0% {
+    box-shadow: 0 0 0px 0px rgba(241, 196, 15, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 8px 4px rgba(241, 196, 15, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 0px 0px rgba(241, 196, 15, 0);
+  }
+}
+
+.circle.highlight {
+  animation: highlightCircle 0.4s ease-out;
+}
+
 /* ========== SVG OVERLAY FOR LINES ========== */
 #lines-overlay {
   position: absolute;
@@ -130,13 +147,35 @@ body {
   pointer-events: none; /* clicks go through SVG to circles */
 }
 
-/* Each drawn line is a polyline in SVG */
-.polyline-1 {
-  stroke: #2980b9; /* Player 1 line color */
+/* Common polyline styling */
+#lines-overlay polyline {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
+/* Player 1 line color and draw‐animation */
+.polyline-1 {
+  stroke: #2980b9;
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawLine 0.6s forwards ease-in-out;
+}
+
+/* Player 2 line color and draw‐animation */
 .polyline-2 {
-  stroke: #e74c3c; /* Player 2 line color */
+  stroke: #e74c3c;
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawLine 0.6s forwards ease-in-out;
+}
+
+/* Animate stroke-dashoffset from full length ⇒ 0 */
+@keyframes drawLine {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* ========== MOBILE RESPONSIVENESS ========== */
