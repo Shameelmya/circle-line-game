@@ -1,235 +1,154 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-import { getDatabase, ref, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+// script.js
+import { db, ref, onValue, set, update } from './firebase.js';
 
-// Firebase Config
-const firebaseConfig = {
-    apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
-    authDomain: "circle-line-game.firebaseapp.com",
-    databaseURL: "https://circle-line-game-default-rtdb.firebaseio.com",
-    projectId: "circle-line-game",
-    storageBucket: "circle-line-game.appspot.com",
-    messagingSenderId: "73822238753",
-    appId: "1:73822238753:web:48c52f0ffef482235e0b60"
-};
+const gridContainer = document.getElementById("circleGrid");
+const canvas = document.getElementById("lineCanvas");
+const ctx = canvas.getContext("2d");
+const turnIndicator = document.getElementById("turnIndicator");
+const player1Score = document.getElementById("player1");
+const player2Score = document.getElementById("player2");
+const resetBtn = document.getElementById("resetGame");
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+let roomId = "demo-room";
+let playerId = localStorage.getItem("playerId") || (Math.random() > 0.5 ? "blue" : "red");
+localStorage.setItem("playerId", playerId);
+let turn = "blue";
+let state = {};
+let score = { blue: 0, red: 0 };
 
-// Game Variables
-const gameId = "default-game";
-let myPlayerNumber = null;
-let currentTurn = 1;
-let selectedCircles = [];
-let completedLines = {};
+function init() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  gridContainer.innerHTML = "";
 
-// DOM Elements
-const board = document.getElementById("game-board");
-const lineCanvas = document.getElementById("line-canvas");
-const ctx = lineCanvas.getContext("2d");
-const playerIdDisplay = document.getElementById("player-id");
-const score1Display = document.getElementById("score1");
-const score2Display = document.getElementById("score2");
-const connections1Display = document.getElementById("connections1");
-const connections2Display = document.getElementById("connections2");
-const gameStatus = document.getElementById("game-status");
-const resetBtn = document.getElementById("reset-btn");
-const turnIndicator = document.getElementById("turn-indicator");
+  for (let i = 0; i < 10; i++) {
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.justifyContent = "center";
+    for (let j = 0; j < 10 - i; j++) {
+      const circle = document.createElement("div");
+      circle.classList.add("circle");
+      circle.dataset.row = i;
+      circle.dataset.col = j;
+      circle.addEventListener("click", handleCircleClick);
+      row.appendChild(circle);
+    }
+    gridContainer.appendChild(row);
+  }
+  listenToGame();
+}
 
-// Initialize Game Board
-function createBoard() {
-    board.innerHTML = "";
-    
-    for (let row = 0; row < 10; row++) {
-        const rowDiv = document.createElement("div");
-        rowDiv.className = "row";
-        
-        for (let col = 0; col < (10 - row); col++) {
-            const circle = document.createElement("div");
-            circle.className = "circle empty";
-            circle.dataset.row = row;
-            circle.dataset.col = col;
-            
-            // Touch events for mobile
-            circle.addEventListener("touchstart", (e) => {
-                e.preventDefault();
-                handleCircleClick(row, col);
-            });
-            
-            // Mouse events for desktop
-            circle.addEventListener("click", () => handleCircleClick(row, col));
-            
-            rowDiv.appendChild(circle);
+function handleCircleClick(e) {
+  if (playerId !== turn) return;
+  const row = e.target.dataset.row;
+  const col = e.target.dataset.col;
+  const key = `${row}-${col}`;
+
+  if (state[key]) return;
+
+  state[key] = playerId;
+  update(ref(db, `games/${roomId}`), {
+    state,
+    turn: null
+  });
+}
+
+function listenToGame() {
+  const gameRef = ref(db, `games/${roomId}`);
+  onValue(gameRef, (snapshot) => {
+    const data = snapshot.val() || { state: {}, turn: "blue", lines: [], score: { blue: 0, red: 0 } };
+    state = data.state;
+    turn = data.turn || (playerId === "blue" ? "red" : "blue");
+    score = data.score || { blue: 0, red: 0 };
+
+    updateBoard();
+    drawLines(data.lines || []);
+    update(ref(db, `games/${roomId}`), { turn });
+  });
+}
+
+function updateBoard() {
+  document.querySelectorAll(".circle").forEach(circle => {
+    const key = `${circle.dataset.row}-${circle.dataset.col}`;
+    circle.classList.remove("filled-blue", "filled-red");
+    if (state[key]) circle.classList.add(`filled-${state[key]}`);
+  });
+  turnIndicator.textContent = (turn === playerId) ? "Your Turn" : "Opponent's Turn";
+  player1Score.textContent = `🔵 ${score.blue}`;
+  player2Score.textContent = `🔴 ${score.red}`;
+  checkForLines();
+}
+
+function checkForLines() {
+  const newLines = [];
+  const tempState = {};
+  for (const key in state) {
+    const [r, c] = key.split("-").map(Number);
+    tempState[`${r}-${c}`] = state[key];
+  }
+
+  const directions = [
+    [0, 1], [1, 0], [1, 1], [1, -1]
+  ];
+
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) {
+      for (const [dr, dc] of directions) {
+        const line = [];
+        let cr = r, cc = c;
+        for (let i = 0; i < 4; i++) {
+          if (tempState[`${cr}-${cc}`] === playerId) {
+            line.push([cr, cc]);
+          }
+          cr += dr;
+          cc += dc;
         }
-        
-        board.appendChild(rowDiv);
-    }
-}
-
-// Initialize Canvas
-function initCanvas() {
-    const boardRect = board.getBoundingClientRect();
-    lineCanvas.width = boardRect.width;
-    lineCanvas.height = boardRect.height;
-    drawAllLines();
-}
-
-// Draw all lines
-function drawAllLines() {
-    ctx.clearRect(0, 0, lineCanvas.width, lineCanvas.height);
-    
-    for (const lineId in completedLines) {
-        const line = completedLines[lineId];
-        drawSingleLine(line.points, line.player);
-    }
-}
-
-// Draw a single line
-function drawSingleLine(points, player) {
-    if (points.length < 2) return;
-    
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    
-    for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-    }
-    
-    ctx.strokeStyle = player === 1 ? "#3498db" : "#e74c3c";
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.stroke();
-}
-
-// Handle Circle Clicks
-function handleCircleClick(row, col) {
-    if (myPlayerNumber !== currentTurn) return;
-    
-    const circle = document.querySelector(`.circle[data-row="${row}"][data-col="${col}"]`);
-    
-    // Only allow connecting filled circles
-    if (!circle || !circle.classList.contains(`filled${myPlayerNumber}`)) return;
-    
-    // Get circle center position
-    const circleRect = circle.getBoundingClientRect();
-    const boardRect = board.getBoundingClientRect();
-    
-    const point = {
-        x: circleRect.left + circleRect.width/2 - boardRect.left,
-        y: circleRect.top + circleRect.height/2 - boardRect.top,
-        row,
-        col
-    };
-    
-    // Add to selected circles
-    selectedCircles.push(point);
-    
-    // If we have at least 2 selected circles, draw line
-    if (selectedCircles.length >= 2) {
-        const lastTwo = selectedCircles.slice(-2);
-        const lineId = Date.now();
-        
-        // Save line to Firebase
-        const updates = {};
-        updates[`${gameId}/lines/${lineId}`] = {
-            player: myPlayerNumber,
-            points: lastTwo
-        };
-        updates[`${gameId}/currentTurn`] = myPlayerNumber === 1 ? 2 : 1;
-        updates[`${gameId}/lastActivity`] = Date.now();
-        
-        update(ref(db), updates).catch(console.error);
-    }
-    
-    drawAllLines();
-}
-
-// Calculate Scores
-function calculateScores(lines) {
-    let score1 = 0, score2 = 0;
-    let connections1 = 0, connections2 = 0;
-    
-    for (const lineId in lines) {
-        const line = lines[lineId];
-        const connections = line.points.length - 1;
-        
-        if (line.player === 1) {
-            score1 += connections * 2;
-            connections1 += connections;
-        } else {
-            score2 += connections * 2;
-            connections2 += connections;
+        if (line.length === 4) {
+          newLines.push({ from: line[0], to: line[3], player: playerId });
+          score[playerId] += 4;
         }
+      }
     }
-    
-    return { score1, score2, connections1, connections2 };
+  }
+  if (newLines.length) {
+    update(ref(db, `games/${roomId}`), {
+      lines: newLines,
+      score,
+      turn: playerId
+    });
+  }
 }
 
-// Update Game State
-function updateGameState(snapshot) {
-    const data = snapshot.val() || { board: {}, players: {}, lines: {} };
-    
-    // Update completed lines
-    completedLines = data.lines || {};
-    drawAllLines();
-    
-    // Update scores
-    const { score1, score2, connections1, connections2 } = calculateScores(completedLines);
-    score1Display.textContent = score1;
-    score2Display.textContent = score2;
-    connections1Display.textContent = connections1;
-    connections2Display.textContent = connections2;
-    
-    // Update turn
-    currentTurn = data.currentTurn || 1;
-    gameStatus.textContent = myPlayerNumber === currentTurn ? "Your turn!" : "Opponent's turn...";
-    
-    // Update turn indicator
-    turnIndicator.className = "turn-indicator";
-    if (myPlayerNumber === currentTurn) {
-        turnIndicator.classList.add("active");
-        turnIndicator.style.backgroundColor = myPlayerNumber === 1 ? "#3498db" : "#e74c3c";
+function drawLines(lines) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  lines.forEach(line => {
+    const fromEl = document.querySelector(`[data-row='${line.from[0]}'][data-col='${line.from[1]}']`);
+    const toEl = document.querySelector(`[data-row='${line.to[0]}'][data-col='${line.to[1]}']`);
+    if (fromEl && toEl) {
+      const rect1 = fromEl.getBoundingClientRect();
+      const rect2 = toEl.getBoundingClientRect();
+      ctx.beginPath();
+      ctx.moveTo(rect1.left + 15, rect1.top + 15);
+      ctx.lineTo(rect2.left + 15, rect2.top + 15);
+      ctx.strokeStyle = line.player === "blue" ? "#3b82f6" : "#ef4444";
+      ctx.lineWidth = 4;
+      ctx.stroke();
     }
-    
-    // Assign player number
-    if (!myPlayerNumber) {
-        const players = data.players || {};
-        myPlayerNumber = Object.keys(players).length < 2 ? Object.keys(players).length + 1 : null;
-        
-        if (myPlayerNumber) {
-            playerIdDisplay.textContent = `PLAYER ${myPlayerNumber}`;
-            playerIdDisplay.style.color = myPlayerNumber === 1 ? "#3498db" : "#e74c3c";
-            set(ref(db, `${gameId}/players/${myPlayerNumber}`), true);
-        } else {
-            gameStatus.textContent = "Game is full (2 players max)";
-        }
-    }
+  });
 }
 
-// Reset Button
 resetBtn.addEventListener("click", () => {
-    if (confirm("Reset the game for all players?")) {
-        set(ref(db, gameId), null).then(() => {
-            location.reload();
-        });
-    }
+  set(ref(db, `games/${roomId}`), {
+    state: {},
+    lines: [],
+    score: { blue: 0, red: 0 },
+    turn: "blue"
+  });
 });
 
-// Initialize Game
-createBoard();
-initCanvas();
-window.addEventListener("resize", initCanvas);
-
-// Set initial game state
-set(ref(db, `${gameId}/currentTurn`), 1);
-
-// Listen for game changes
-onValue(ref(db, gameId), updateGameState);
-
-// Cleanup on page close
-window.addEventListener("beforeunload", () => {
-    if (myPlayerNumber) {
-        remove(ref(db, `${gameId}/players/${myPlayerNumber}`));
-    }
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 });
+
+init();
