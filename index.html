@@ -2,75 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  />
-  <title>Circle Battle (Row Connect)</title>
-
-  <!-- Nexa Font (fallback) -->
-  <link
-    href="https://fonts.googleapis.com/css2?family=Nexa:wght@400;600;700&display=swap"
-    rel="stylesheet"
-  />
-
-  <!-- Main CSS -->
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Circle Line Game</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nexa:wght@400;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <!-- ---------- HEADER: SCOREBOARD + TURN + RESET BUTTON ---------- -->
-  <header id="header">
-    <div id="scoreboard">
-      <div class="player-score" id="player1-score">
-        Player 1: <span class="score-value">0</span>
-      </div>
-      <div class="player-score" id="player2-score">
-        Player 2: <span class="score-value">0</span>
-      </div>
+  <div class="container">
+    <h1 class="title">Circle Line Game</h1>
+    <div id="turnIndicator" class="turn-indicator">Loading...</div>
+    <div class="scoreboard">
+      <div id="player1" class="score">🔵 0</div>
+      <div id="player2" class="score">🔴 0</div>
     </div>
-    <div id="turn-indicator">Connecting...</div>
-    <button id="reset-btn">New Game</button>
-  </header>
-
-  <!-- ---------- GAME BOARD CONTAINER ---------- -->
-  <main id="game-wrapper">
-    <div id="game-container">
-      <!-- JS will inject rows of circles here -->
+    <div id="circleGrid" class="circle-grid"></div>
+    <div class="controls">
+      <button id="giveTurn" class="btn">Give Turn</button>
+      <button id="resetGame" class="btn">Reset Game</button>
     </div>
-    <!-- SVG overlay for drawn lines & eligible dashed lines -->
-    <svg id="lines-overlay"></svg>
-  </main>
+  </div>
 
-  <!-- Firebase App (v9 Modular) -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-    import {
-      getDatabase,
-      ref,
-      onValue,
-      set,
-      update,
-    } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+  <canvas id="lineCanvas"></canvas>
 
-    // Your own Firebase configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
-      authDomain: "circle-line-game.firebaseapp.com",
-      projectId: "circle-line-game",
-      storageBucket: "circle-line-game.firebasestorage.app",
-      messagingSenderId: "73822238753",
-      appId: "1:73822238753:web:48c52f0ffef482235e0b60"
-    };
+  <!-- Pop‑up Modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-content">
+      <span id="modalClose" class="modal-close">&times;</span>
+      <p id="modalText"></p>
+      <button id="modalOk" class="btn">OK</button>
+    </div>
+  </div>
 
-    // Initialize Firebase & Realtime Database
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
-    // Expose the DB to script.js
-    window.__FIREBASE_DB__ = db;
-  </script>
-
-  <!-- Main Game Logic -->
+  <script type="module" src="firebase.js"></script>
   <script type="module" src="script.js"></script>
 </body>
 </html>
