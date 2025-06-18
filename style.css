@@ -1,204 +1,100 @@
-/* ========== BASE RESET & TYPOGRAPHY ========== */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* Base */
+:root {
+  --blue: #3b82f6;
+  --red: #ef4444;
+  --bg: #f0f2f5;
+  --fg: #333;
+  --muted: #666;
+  --neon-blue: rgba(59,130,246,0.7);
+  --neon-red: rgba(239,68,68,0.7);
 }
 
-html,
+* { box-sizing: border-box; margin:0; padding:0; }
+
 body {
-  height: 100%;
-  width: 100%;
-  overflow: hidden; /* prevent page from scrolling while drawing */
-  font-family: "Nexa", "Helvetica Neue", Arial, sans-serif;
-  background-color: #f5f6fa;
-  color: #2c3e50;
+  font-family: 'Nexa', sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+}
+.container {
+  max-width: 600px; margin: auto; padding:20px; text-align:center;
+}
+.title { font-size:2.5rem; margin-bottom:10px; }
+
+/* Turn Indicator */
+.turn-indicator {
+  font-size:1.2rem; margin-bottom:20px;
+  color: var(--muted);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100%{opacity:1;}
+  50%{opacity:0.6;}
 }
 
-/* ========== HEADER: SCOREBOARD + TURN + RESET BUTTON ========== */
-#header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 2rem;
-  background: #ffffff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+/* Scoreboard */
+.scoreboard {
+  display:flex; justify-content:space-around; margin-bottom:20px;
+  font-size:1.3rem; font-weight:bold;
 }
 
-#scoreboard {
-  display: flex;
-  gap: 2rem;
+/* Grid */
+.circle-grid {
+  display:flex; flex-direction:column; align-items:center;
+  gap:6px; touch-action:none;
 }
-
-.player-score {
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.player-score .score-value {
-  font-weight: 700;
-  color: #2980b9;
-}
-
-#turn-indicator {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #27ae60;
-}
-
-#reset-btn {
-  padding: 0.5rem 1rem;
-  background-color: #e74c3c;
-  color: #fff;
-  border: none;
-  border-radius: 0.25rem;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-#reset-btn:hover {
-  background-color: #c0392b;
-}
-
-/* ========== GAME WRAPPER ========== */
-#game-wrapper {
-  position: relative; /* so the SVG overlay (absolute) matches exactly */
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: calc(100% - 72px); /* subtract approximate header height */
-}
-
-/* ========== BOARD CONTAINER ========== */
-#game-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* margin is inside the wrapper, not affecting overlay */
-  margin: 1rem;
-  user-select: none;
-}
-
-/* Each row is centered horizontally */
-.row {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 0.5rem;
-}
-
-/* ========== CIRCLE STYLES ========== */
+.circle-row { display:flex; gap:6px; }
 .circle {
-  width: 32px;
-  height: 32px;
-  border: 2px solid #34495e;
-  border-radius: 50%;
-  background-color: transparent;
-  margin: 0 4px;
-  position: relative;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  width:36px; height:36px; border:2px solid #999;
+  border-radius:50%; background:#fff;
+  position:relative; cursor:pointer;
+  transition: transform 0.15s ease;
+}
+.circle:active { transform: scale(1.1); }
+.circle.filled-blue { background: var(--blue); border-color: var(--blue); }
+.circle.filled-red { background: var(--red); border-color: var(--red); }
+
+/* Buttons */
+.controls { margin-top:20px; display:flex; justify-content:center; gap:10px; }
+.btn {
+  padding:10px 16px; font-size:1rem; border:none; border-radius:6px;
+  background: var(--blue); color:#fff; cursor:pointer;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  transition: background 0.2s;
+}
+.btn:hover { background: darken(var(--blue),10%); }
+
+/* Canvas for lines */
+#lineCanvas {
+  position:fixed; top:0; left:0; width:100vw; height:100vh;
+  pointer-events:none; z-index:0;
 }
 
-.circle.filled-1 {
-  background-color: #2980b9; /* Player 1 fill */
-  border-color: #2980b9;
+/* Modal */
+.modal {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background: rgba(0,0,0,0.5); display:flex;
+  justify-content:center; align-items:center;
+  animation: fadeIn 0.3s ease;
+}
+.hidden { display:none; }
+@keyframes fadeIn {
+  from{opacity:0;} to{opacity:1;}
+}
+.modal-content {
+  background:#fff; padding:20px; border-radius:8px;
+  max-width:80%; text-align:center; box-shadow:0 6px 12px rgba(0,0,0,0.2);
+}
+.modal-close {
+  position:absolute; top:16px; right:16px; font-size:1.4rem; cursor:pointer;
 }
 
-.circle.filled-2 {
-  background-color: #e74c3c; /* Player 2 fill */
-  border-color: #e74c3c;
+/* Particle container (absolute over canvas) */
+.particle {
+  position:absolute; width:6px; height:6px; border-radius:50%;
+  opacity:0.8; animation: particleAnim 0.8s forwards;
 }
-
-/* Disable pointer & fade if not clickable */
-.circle.disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-/* ========== HIGHLIGHT ANIMATION FOR COMPLETED-LINE CIRCLES ========== */
-@keyframes highlightCircle {
-  0% {
-    box-shadow: 0 0 0px 0px rgba(241, 196, 15, 0.8);
-  }
-  50% {
-    box-shadow: 0 0 8px 4px rgba(241, 196, 15, 0.8);
-  }
-  100% {
-    box-shadow: 0 0 0px 0px rgba(241, 196, 15, 0);
-  }
-}
-
-.circle.highlight {
-  animation: highlightCircle 0.4s ease-out;
-}
-
-/* ========== SVG OVERLAY FOR LINES ========== */
-#lines-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;   /* cover entire #game-wrapper */
-  height: 100%;  /* ditto */
-  z-index: 1;
-  pointer-events: none; /* base SVG does not intercept clicks */
-}
-
-/* Common polyline styling (drawn lines) */
-#lines-overlay polyline {
-  fill: none;
-  stroke-width: 4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.polyline-1 {
-  stroke: #2980b9;       /* Player 1 line color */
-  stroke-dasharray: 1000;
-  stroke-dashoffset: 1000;
-  animation: drawLine 0.6s forwards ease-in-out;
-}
-
-.polyline-2 {
-  stroke: #e74c3c;       /* Player 2 line color */
-  stroke-dasharray: 1000;
-  stroke-dashoffset: 1000;
-  animation: drawLine 0.6s forwards ease-in-out;
-}
-
-@keyframes drawLine {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* ========== ELIGIBLE-LINE (CLICKABLE DASHED) STYLING ========== */
-.eligible-line {
-  fill: none;
-  stroke: rgba(52, 152, 219, 0.4);
-  stroke-dasharray: 4 4;
-  stroke-width: 6;
-  cursor: pointer;
-  pointer-events: all; /* allow taps/clicks */
-}
-
-/* ========== MOBILE RESPONSIVENESS ========== */
-@media (max-width: 600px) {
-  .circle {
-    width: 28px;
-    height: 28px;
-    margin: 0 2px;
-  }
-  #reset-btn {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.9rem;
-  }
-  #header {
-    padding: 0.8rem 1rem;
-  }
+@keyframes particleAnim {
+  to { transform: translate(var(--dx), var(--dy)) scale(0.1); opacity:0; }
 }
