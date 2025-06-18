@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial‑scale=1.0"/>
   <title>Circle Line Game</title>
   <link href="https://fonts.googleapis.com/css2?family=Nexa:wght@400;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="style.css"/>
@@ -10,30 +10,61 @@
 <body>
   <div class="container">
     <h1 class="title">Circle Line Game</h1>
-    <div id="turnIndicator" class="turn-indicator">Loading...</div>
-    <div class="scoreboard">
-      <div id="player1" class="score">🔵 0</div>
-      <div id="player2" class="score">🔴 0</div>
+
+    <!-- Player Setup Modal -->
+    <div id="setupModal" class="modal">
+      <div class="modal-content">
+        <h2>Select Your Player</h2>
+        <button id="chooseBlue" class="btn blue">🔵 Player Blue</button>
+        <button id="chooseRed"  class="btn red">🔴 Player Red</button>
+      </div>
     </div>
+
+    <div id="turnIndicator" class="turn-indicator">Waiting...</div>
+
+    <div class="scoreboard">
+      <div id="player1" class="score blue">🔵 0</div>
+      <div id="player2" class="score red">🔴 0</div>
+    </div>
+
     <div id="circleGrid" class="circle-grid"></div>
+
     <div class="controls">
-      <button id="giveTurn" class="btn">Give Turn</button>
-      <button id="resetGame" class="btn">Reset Game</button>
+      <button id="giveTurn"  class="btn toggle">Give Turn 🔄</button>
+      <button id="resetGame" class="btn">Reset Game ♻️</button>
     </div>
   </div>
 
-  <canvas id="lineCanvas"></canvas>
-
-  <!-- Pop‑up Modal -->
+  <!-- Info Modal -->
   <div id="modal" class="modal hidden">
     <div class="modal-content">
-      <span id="modalClose" class="modal-close">&times;</span>
       <p id="modalText"></p>
       <button id="modalOk" class="btn">OK</button>
     </div>
   </div>
 
-  <script type="module" src="firebase.js"></script>
+  <!-- Firebase + Game Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import {
+      getDatabase, ref, onValue, runTransaction, set
+    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    // Initialize Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyBnOC0IGWlpOTSUFoMqtji36XqrFgYoRII",
+      authDomain: "circle-line-game.firebaseapp.com",
+      projectId: "circle-line-game",
+      storageBucket: "circle-line-game.appspot.com",
+      messagingSenderId: "73822238753",
+      appId: "1:73822238753:web:48c52f0ffef482235e0b60",
+      databaseURL: "https://circle-line-game-default-rtdb.asia-southeast1.firebasedatabase.app"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+
+    window.Firebase = { db, ref, onValue, runTransaction, set };
+  </script>
   <script type="module" src="script.js"></script>
 </body>
 </html>
